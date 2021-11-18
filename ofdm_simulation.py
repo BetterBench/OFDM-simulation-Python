@@ -42,8 +42,6 @@ def Modulation(bits):
         symbol = BPSK.modulate(bits)
         return symbol
 # 定义解调方式
-
-
 def DeModulation(symbol):
     if Modulation_type == "QPSK":
         PSK4 = cpy.PSKModem(4)
@@ -80,27 +78,27 @@ def channel(in_signal, SNRdb, channel_type="awgn"):
     elif channel_type == "awgn":
         out_signal, noise_pwr = add_awgn(in_signal, SNRdb)
     return out_signal, noise_pwr
-# 5.3 插入导频和数据，生成OFDM符号
+# 插入导频和数据，生成OFDM符号
 def OFDM_symbol(QAM_payload):
     symbol = np.zeros(K, dtype=complex)  # 子载波位置
     symbol[pilotCarriers] = pilotValue  # 在导频位置插入导频
     symbol[dataCarriers] = QAM_payload  # 在数据位置插入数据
     return symbol
-# 5.4 快速傅里叶逆变换
+# 快速傅里叶逆变换
 def IDFT(OFDM_data):
     return np.fft.ifft(OFDM_data)
-# 5.5 添加循环前缀
+# 添加循环前缀
 def addCP(OFDM_time):
     cp = OFDM_time[-CP:]
     return np.hstack([cp, OFDM_time])
-# 5.7 接收端，去除循环前缀
+# 接收端，去除循环前缀
 def removeCP(signal):
     return signal[CP:(CP+K)]
 
-# 5.8 快速傅里叶变换
+# 快速傅里叶变换
 def DFT(OFDM_RX):
     return np.fft.fft(OFDM_RX)
-# 5.9 信道估计
+# 信道估计
 def channelEstimate(OFDM_demod):
     pilots = OFDM_demod[pilotCarriers]  # 取导频处的数据
     Hest_at_pilots = pilots / pilotValue  # LS信道估计s
@@ -111,36 +109,39 @@ def channelEstimate(OFDM_demod):
         Hest_at_pilots), kind='linear')(allCarriers)
     Hest = Hest_abs * np.exp(1j*Hest_phase)
     return Hest
-# 5.10 均衡
+# 均衡
 def equalize(OFDM_demod, Hest):
     return OFDM_demod / Hest
 
-
 def OFDM_simulation():
-    # 5.1 产生比特流
+    # 产生比特流
     bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM, ))
-    # 5.2 比特信号调制
+    # 比特信号调制
     QAM_s = Modulation(bits)
-
+    # 生成OFDM符号
     OFDM_data = OFDM_symbol(QAM_s)
+    # 快速逆傅里叶变换
     OFDM_time = IDFT(OFDM_data)
-
+    # 添加循环前缀
     OFDM_withCP = addCP(OFDM_time)
 
-    # 5.6 经过信道
+    # 经过信道
     OFDM_TX = OFDM_withCP
     OFDM_RX = channel(OFDM_TX, SNRdb, "random")[0]
 
+    # 去除循环前缀
     OFDM_RX_noCP = removeCP(OFDM_RX)
+    # 快速傅里叶变换
     OFDM_demod = DFT(OFDM_RX_noCP)
-
+    # 信道估计
     Hest = channelEstimate(OFDM_demod)
+    # 均衡
     equalized_Hest = equalize(OFDM_demod, Hest)
-    # 5.10 获取数据位置的数据
+    # 获取数据位置的数据
     def get_payload(equalized):
         return equalized[dataCarriers]
     QAM_est = get_payload(equalized_Hest)
-    # 5.11 反映射，解调
+    # 反映射，解调
     bits_est = DeModulation(QAM_est)
     # print(bits_est)
     print("误比特率BER： ", np.sum(abs(bits-bits_est))/len(bits))
